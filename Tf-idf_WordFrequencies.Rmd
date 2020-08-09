@@ -1,0 +1,75 @@
+---
+title: "Tf-idf_WordFrequencies"
+author: "Merle-Sophie Wuelbers"
+date: "8/2/2020"
+output: html_document
+---
+
+
+```{r}
+# Load relevant libraries
+library(wordcloud)
+library(tm)
+library(quanteda)
+library(udpipe)
+```
+
+
+## Tf-Idf Word Frequency Analysis
+
+To re-run the analysis, load your data and call it `data`. It should contain a text column `Text` with raw Text data.
+
+```{r}
+# Function for creating text corpora and preprocessing
+preprocess_corpus <- function(x){
+  corpus <- VCorpus(VectorSource(x))
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, removeWords, words = c(stopwords("english"), my_stopwords))
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, removeNumbers)
+  #quanteda::corpus(corpus)
+}
+```
+
+## Preprocess 
+
+
+#### Stopwords
+
+To remove custom stopwords, store it under the variable name `my_stopwords`. 
+
+```{r}
+# 1. Apply preprocessing techniques to text column using helper function 
+data <- preprocess_corpus(data$Text)
+
+# 2. Tokenize
+data_tokens <- tokens(data, remove_punct = TRUE)
+
+# 3. Create bigrams
+data_tokens <- tokens_ngrams(data_tokens, n = 1:2)
+
+# 6. Create dfm
+data_dfm <- dfm(data_tokens)
+
+# 7. Convert quanteda dfm object to
+# a DocumentTermMatrix from the tm package
+data_dtm <- convert(data_dfm, to = "tm")
+````
+
+## Wordclouds
+
+```{r}
+# For informative frequencies of terms, weigh the dtm with tf-idf
+data_dtm_weighted <- weightTfIdf(data_dtm)
+
+# Remove sparse terms
+data_dtm_weighted <- removeSparseTerms(google_dtm_weighted, 0.99)
+
+# Order by most frequent terms
+data_freq <- data.frame(sort(colSums(as.matrix(data_dtm_weighted)), decreasing = TRUE))
+
+# Create a wordcloud with most frequent terms
+wordcloud(rownames(data_freq), data_freq[,1], max.words = 15, colors = brewer.pal(9, "Paired"), rot.per = 0)
+```
+
+
