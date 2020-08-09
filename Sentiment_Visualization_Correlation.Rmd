@@ -1,0 +1,137 @@
+---
+title: "Sentiment_Visualization_Correlation"
+author: "Merle-Sophie Wuelbers"
+date: "8/6/2020"
+output: html_document
+---
+
+```{r}
+# Load relevant libraries
+library(ggplot2)
+library(jtools)
+library(dplyr)
+library(stringr)
+library(scales)
+library(lubridate)
+library(wordcloud)
+library(dplyr)
+library(tidyr)
+library(ggsave)
+```
+
+
+# Visualizing Sentiment 
+
+This part requires data in the form of a data frame, with row per Reddit comment and the following columns:
+
+1. 'Text': the cleaned text of a comment (URLs, bot comments, etc. already removed)
+2. 'compound': the VADER compound sentiment score for the given comment
+3. 'Created.Date': The time stamp of the comment in <date> format
+
+To re-run the analysis, load your text data and name it 'data'.
+
+
+```{r}
+# Set APA theme for plots
+apatheme = theme_bw()+
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line(),
+        legend.title=element_blank(),
+        axis.text.x = element_text(angle = 90), axis.text = element_text(size=10))
+```
+
+
+## Sentiment over time
+
+If it is aimed at computing running correlations between two sentiment curves in the following step, add a prefix to the `sent_per_day` variable to distinguish between different data (e.g. `google_sent_per_day`). 
+
+```{r}
+# 1. Calculate mean sentiment score per day; aggregate data by day
+
+sent_per_day <- 
+  aggregate(data$compound, by=list(date=data$Created.Date), FUN=mean)
+colnames(sent_per_day) <- c("date", "compound_score_mean")
+```
+
+```{r}
+# 2. Plot sentiment over time 
+sent_overtime <- function(df){
+  ggplot(df, aes(x=date, y=compound_score_mean)) + 
+    xlab("") +
+    ylab("Average Compound VADER Score") +
+    scale_x_date(labels = date_format("%d/%m/%y"), 
+                 breaks = seq(min(df$date), max(df$date), 2)) +
+    scale_y_continuous(limits = c(-0.1,+0.35)) +
+    geom_smooth(method = 'loess', formula= y ~ x, se=TRUE, fullrange=FALSE,
+                level=0.95, colour="white", alpha=.4, size=.5) +
+    geom_line(color="black") +
+    geom_hline(yintercept = 0, linetype=1, size = 0.15) +
+    apatheme
+}
+
+sent_overtime(sent_per_day)
+```
+
+
+### Running Correlations
+
+Compute and plot pairwise running correlations between two firms by using their aggregated datasets called ´firm_sent_per_day` as seen below.
+
+```{r}
+# Compute pairwise running correlations
+G_AM <- runCor(google_sent_per_day$compound_score_mean, 
+                     amazon_sent_per_day$compound_score_mean, 10)
+G_F <- runCor(google_sent_per_day$compound_score_mean, 
+                     facebook_sent_per_day$compound_score_mean, 10)
+G_AP <- runCor(google_sent_per_day$compound_score_mean, 
+                     apple_sent_per_day$compound_score_mean, 10)
+AM_F <- runCor(amazon_sent_per_day$compound_score_mean, 
+                     facebook_sent_per_day$compound_score_mean, 10)
+AM_AP <- runCor(amazon_sent_per_day$compound_score_mean, 
+                     apple_sent_per_day$compound_score_mean, 10)
+F_AP <- runCor(facebook_sent_per_day$compound_score_mean, 
+                     apple_sent_per_day$compound_score_mean, 10)
+```
+
+```{r}
+# Create df; wide format
+GAFA_correlations <- data.frame(date = google_sent_per_day$date, G_AM, G_F,
+                                G_AP, AM_F, AM_AP, F_AP)
+# Convert to long format
+GAFA_correlations_long <- GAFA_correlations %>%
+  gather(Description, PearsonsR, 
+         G_AM, G_F, G_AP, AM_F, AM_AP, F_AP)
+
+# Rename Factors
+GAFA_correlations_long$Description <- 
+  factor(GAFA_correlations_long$Description,
+         levels = c("G_AM", "G_F", "G_AP", "AM_F", "AM_AP", "F_AP"),
+         labels = c("Google & Amazon", "Google & Facebook", "Google & Apple", 
+               "Amazon & Facebook", "Amazon & Apple", "Facebook & Apple"))
+```
+
+```{r}
+# Specify colours
+mycols <- c("#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#CC79A7")
+
+# Plot
+sentiment_correlation_plot <- 
+  ggplot(GAFA_correlations_long, aes(date, y= PearsonsR, color = Description)) +
+  geom_line() +
+  scale_color_manual(values = mycols) + 
+  ylab("Pearsron's R") +
+  xlab("") +
+  facet_wrap(~Description) + 
+  scale_x_date(labels = date_format("%d/%m/%y"), 
+                 breaks = seq(min(GAFA_correlations_long$date),
+                              max(GAFA_correlations_long$date), 15)) +
+  apatheme +
+  theme(axis.text.x = element_text(angle = 90), 
+        axis.text = element_text(size=10)) +
+  theme(legend.position = "none")
+sentiment_correlation_plot
+```
+
